@@ -35,6 +35,7 @@ jobs:
           pip install pyinstaller
       
       - name: Build Executable
+        shell: bash
         run: |
           pyinstaller --onefile --noconsole \
             --collect-all mediapipe \
