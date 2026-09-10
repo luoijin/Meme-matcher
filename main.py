@@ -13,48 +13,23 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def get_model_path(filename):
-  """Get absolute path to bundled resources (read-only)."""
-  if hasattr(sys, '_MEIPASS'):
-    return os.path.join(sys._MEIPASS, filename)
-  return os.path.join(os.path.abspath('.'), filename)
+    """Get absolute path to bundled resources (read-only)."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, filename)
+    return os.path.join(os.path.abspath('.'), filename)
 
 
-# Dynamic Read-Only Asset Paths (Bundled in PyInstaller)
+def get_writable_cache_path(filename="memes_features_cache.pkl"):
+    """Saves runtime cache to current working directory instead of read-only sys._MEIPASS."""
+    return os.path.join(os.getcwd(), filename)
+
+
+# Dynamic Asset Paths
 FACE_MODEL_PATH = get_model_path("face_landmarker.task")
 HAND_MODEL_PATH = get_model_path("hand_landmarker.task")
 MEMES_DIR = get_model_path("assets")
-
-# Dynamic Writable Path (Generated at runtime on the user's machine)
-def get_writable_cache_path(filename="memes_features_cache.pkl"):
-  """Saves runtime cache to current working directory instead of read-only sys._MEIPASS."""
-  return os.path.join(os.getcwd(), filename)
-
-
 CACHE_PATH = get_writable_cache_path()
 
-
-# Cache Loading & Generation Logic
-def load_or_create_meme_cache():
-  if os.path.exists(CACHE_PATH):
-    try:
-      with open(CACHE_PATH, "rb") as f:
-        print("[INFO] Loaded existing feature cache.")
-        return pickle.load(f)
-    except Exception as e:
-      print(f"[WARNING] Corrupted cache detected, regenerating: {e}")
-
-  print("[INFO] Generating new feature cache for first-time setup...")
-  # Replace 'compute_meme_features()' with your actual feature generation function name
-  features = compute_meme_features()
-
-  try:
-    with open(CACHE_PATH, "wb") as f:
-      pickle.dump(features, f)
-    print(f"[INFO] Cache successfully saved to {CACHE_PATH}")
-  except Exception as e:
-    print(f"[ERROR] Failed to save cache to disk: {e}")
-
-  return features
 
 class MemeMatcher:
     # MediaPipe landmark indices for facial features
@@ -75,9 +50,7 @@ class MemeMatcher:
     RING_TIP, RING_PIP, RING_MCP = 16, 14, 13
     PINKY_TIP, PINKY_PIP, PINKY_MCP = 20, 18, 17
 
-    CACHE_FILE = "meme_features_cache.pkl"
-
-    def __init__(self, assets_folder="assets", frame_skip=2, meme_height=480, match_threshold=120):
+    def __init__(self, assets_folder=MEMES_DIR, frame_skip=2, meme_height=480, match_threshold=120):
         self.last_features = None
         self.frame_counter = 0
         self.frame_skip = frame_skip
@@ -86,15 +59,6 @@ class MemeMatcher:
         self.tracking_active = False
         self.missing_face_frames = 0
         self.MISSING_FRAME_THRESHOLD = 5
-
-        # self.face_model_path = self._download_model(
-        #     "face_landmarker.task",
-        #     "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-        # )
-        # self.hand_model_path = self._download_model(
-        #     "hand_landmarker.task",
-        #     "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
-        # )
 
         self.face_mesh_video = self._init_face_landmarker(video_mode=True)
         self.hand_detector_video = self._init_hand_landmarker(video_mode=True)
@@ -116,6 +80,7 @@ class MemeMatcher:
         self.feature_weights = np.array([25, 20, 20, 30, 25, 15, 20, 10, 25, 20, 15, 20, 10, 30, 30, 30, 25, 25, 25, 20])
         self.feature_factors = np.array([10, 10, 10, 10, 15, 15, 5, 5, 5, 5, 5, 5, 5, 12, 12, 12, 12, 4, 4, 10])
 
+        # Load memes using dynamic MEMES_DIR path
         self.load_memes(assets_folder)
 
         if self.memes:
@@ -144,16 +109,6 @@ class MemeMatcher:
                 continue
         return ImageFont.load_default()
 
-    def _download_model(self, model_path, url):
-        if not os.path.exists(model_path):
-            print(f"Downloading {model_path}...")
-            try:
-                subprocess.run(['curl', '-L', url, '-o', model_path], check=True, capture_output=True)
-                print(f"{model_path} downloaded successfully.")
-            except subprocess.CalledProcessError:
-                raise RuntimeError(f"Failed to download model. Please download manually from {url}")
-        return model_path
-
     def _init_face_landmarker(self, video_mode=True):
         mode = (
             mp.tasks.vision.RunningMode.VIDEO
@@ -161,12 +116,9 @@ class MemeMatcher:
             else mp.tasks.vision.RunningMode.IMAGE
         )
 
-        # Use the dynamically resolved bundled path
-        model_path = get_model_path("face_landmarker.task")
-
         return mp.tasks.vision.FaceLandmarker.create_from_options(
             mp.tasks.vision.FaceLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+                base_options=mp.tasks.BaseOptions(model_asset_path=FACE_MODEL_PATH),
                 running_mode=mode,
                 num_faces=1,
                 min_face_detection_confidence=0.5 if video_mode else 0.3,
@@ -182,12 +134,9 @@ class MemeMatcher:
             else mp.tasks.vision.RunningMode.IMAGE
         )
 
-        # Use the dynamically resolved bundled path
-        model_path = get_model_path('hand_landmarker.task')
-
         return mp.tasks.vision.HandLandmarker.create_from_options(
             mp.tasks.vision.HandLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
+                base_options=mp.tasks.BaseOptions(model_asset_path=HAND_MODEL_PATH),
                 running_mode=mode,
                 num_hands=2,
                 min_hand_detection_confidence=0.5 if video_mode else 0.3,
@@ -207,19 +156,20 @@ class MemeMatcher:
             + list(assets_path.glob("*.jpeg"))
             + list(assets_path.glob("*.png"))
         )
-        print(f"Found {len(image_files)} meme image(s) in '{folder}'.")
+        print(f"[INFO] Looking for memes in: {assets_path.absolute()}")
+        print(f"[INFO] Found {len(image_files)} meme image(s).")
 
         cache = {}
-        if os.path.exists(self.CACHE_FILE):
+        if os.path.exists(CACHE_PATH):
             try:
-                with open(self.CACHE_FILE, "rb") as f:
+                with open(CACHE_PATH, "rb") as f:
                     loaded = pickle.load(f)
                 if isinstance(loaded, dict):
                     cache = loaded
                 else:
-                    print("Cache is in an old format, rebuilding it.")
+                    print("[INFO] Cache is in an old format, rebuilding it.")
             except (pickle.UnpicklingError, EOFError, AttributeError, ValueError):
-                print("Cache file could not be read, rebuilding it.")
+                print("[WARNING] Cache file could not be read, rebuilding it.")
 
         to_process = []
         reused = {}
@@ -234,22 +184,22 @@ class MemeMatcher:
         removed = set(cache.keys()) - {str(f) for f in image_files}
         if removed:
             names = ", ".join(Path(p).name for p in removed)
-            print(f"Dropping {len(removed)} meme(s) no longer in '{folder}': {names}")
+            print(f"[INFO] Dropping {len(removed)} meme(s) no longer in '{folder}': {names}")
 
         if to_process:
-            print(f"Extracting features for {len(to_process)} new/changed image(s)...")
+            print(f"[INFO] Extracting features for {len(to_process)} new/changed image(s)...")
 
             def process_meme(img_file):
                 img = cv2.imread(str(img_file))
                 if img is None:
-                    print(f"Could not read image: {img_file.name}")
+                    print(f"[ERROR] Could not read image: {img_file.name}")
                     return None
                 h, w = img.shape[:2]
                 scale = self.meme_height / h
                 img_resized = cv2.resize(img, (int(w * scale), self.meme_height))
                 features = self.extract_face_features(img_resized, is_static=True)
                 if features is None:
-                    print(f"No face detected in {img_file.name} - skipping.")
+                    print(f"[WARNING] No face detected in {img_file.name} - skipping.")
                     return None
                 meme = {
                     'image': img_resized,
@@ -269,9 +219,9 @@ class MemeMatcher:
                 if r:
                     key, entry = r
                     reused[key] = entry
-                    print(f"Loaded: {entry['meme']['name']}")
+                    print(f"[INFO] Loaded: {entry['meme']['name']}")
         else:
-            print("No new or changed images - using cached features for all of them.")
+            print("[INFO] Using cached features for all images.")
 
         self.memes = []
         self.meme_features = []
@@ -281,10 +231,14 @@ class MemeMatcher:
                 self.memes.append(entry["meme"])
                 self.meme_features.append(entry["features"])
 
-        with open(self.CACHE_FILE, "wb") as f:
-            pickle.dump(reused, f)
+        try:
+            with open(CACHE_PATH, "wb") as f:
+                pickle.dump(reused, f)
+            print(f"[INFO] Cache saved to: {CACHE_PATH}")
+        except Exception as e:
+            print(f"[ERROR] Could not write cache file: {e}")
 
-        print(f"Memes loaded: {len(self.memes)}\n")
+        print(f"[INFO] Total active memes loaded: {len(self.memes)}\n")
 
     def extract_face_features(self, image, is_static=False):
         if is_static:
@@ -519,7 +473,7 @@ class MemeMatcher:
 
     def _draw_dots_loader(self, draw, panel_x, panel_w, panel_h):
         """Renders an animated 3-dot loading indicator at the center of the meme panel."""
-        t = time.time() * 5  # Speed of wave effect
+        t = time.time() * 5
         
         dot_radius = 8
         spacing = 28
@@ -543,8 +497,7 @@ class MemeMatcher:
             )
 
     def _draw_modern_ui(self, display_img, w, h, panel_w, best_meme, score, matched, user_features):
-        
-        MISSING_FRAME_THRESHOLD = 3  # ~100ms response time
+        MISSING_FRAME_THRESHOLD = 3
         
         if user_features is None:
             self.missing_face_frames += 1
@@ -558,7 +511,6 @@ class MemeMatcher:
         overlay = Image.new("RGBA", img_pil.size, (255, 255, 255, 0))
         draw = ImageDraw.Draw(overlay)
 
-        # 1. Floating User Status Pill (Top Left)
         if not self.tracking_active:
             pill_text = "No face detected"
             pill_color = (220, 38, 38, 210)  
@@ -584,7 +536,6 @@ class MemeMatcher:
         
         draw.text((pill_x1 + 28, pill_y1 + 7), pill_text, font=self.font_status, fill=(255, 255, 255, 255))
 
-        # 2. Meme Area UI
         if not matched:
             self._draw_dots_loader(draw, w, panel_w, h)
 
@@ -641,5 +592,5 @@ class MemeMatcher:
 
 if __name__ == "__main__":
     print("Starting...\n")
-    matcher = MemeMatcher(assets_folder="assets")
+    matcher = MemeMatcher()
     matcher.run()
