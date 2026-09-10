@@ -10,8 +10,8 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
 2. It scans your `assets/` folder for meme images (`.jpg`, `.jpeg`, `.png`), runs face/hand landmark detection on each, and extracts a feature vector: eye openness, mouth shape, eyebrow height, plus hand gestures (pointing, thumbs-up, victory, hand raised, hand near face) and where the hand sits relative to the face.
 3. Extracted meme features are cached to `meme_features_cache.pkl`, keyed by each image's modification time and size, so future runs skip re-processing images that haven't changed and start almost instantly.
 4. Your webcam feed is processed frame-by-frame (with configurable frame skipping for performance) and compared against every cached meme using a weighted exponential similarity score. Memes that involve a hand gesture only match when your hand gesture, side (left/right), and rough position relative to your face all agree with the meme's; face-only memes are skipped while you're gesturing.
-5. A match only counts once its score clears `match_threshold` (default `120`) — below that, a "Waiting..." placeholder is shown instead of a meme.
-6. The best-matching meme is displayed side-by-side with your webcam feed, along with its name and match score.
+5. A match only counts once its score clears `match_threshold` (default `120`) — below that, an animated loading indicator is shown in place of a meme.
+6. The best-matching meme is displayed side-by-side with your webcam feed.
 
 ## Requirements
 
@@ -22,6 +22,9 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
   - `opencv-python`
   - `numpy`
   - `mediapipe`
+  - `Pillow` (used to render the on-screen status pill and loading animation)
+
+  > **Note:** `Pillow` isn't currently listed in `requirements.txt` even though `main.py` imports it. Until that's added, install it manually with `pip install Pillow` alongside the other packages.
 
 
 ## Installation
@@ -110,23 +113,24 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
 
 ## Usage
 
-- A window will open showing your webcam feed ("YOU") next to a meme panel.
-- Until your expression/gesture clears the match threshold, the meme panel shows a "Waiting... (score/threshold)" readout.
-- Once matched, the meme's name and similarity score are shown above it.
+- A window titled "Meme Matcher" opens showing your webcam feed next to a meme panel, split by a thin divider line.
+- A status pill in the top-left corner shows whether your face is being tracked: green "Tracking active" when a face is detected, red "No face detected" when it isn't.
+- Until your expression/gesture clears the match threshold, the meme panel shows a centered, animated 3-dot loading wave instead of a meme.
+- Once matched, the meme itself is shown in the panel.
 - Press **`q`** to quit.
 
 Meme features are cached automatically: on each run, Meme Matcher only re-extracts features for images in `assets/` that are new or have changed (by modification time and file size), and drops entries for memes you've removed. You don't need to delete `meme_features_cache.pkl` by hand for day-to-day additions or edits — see Troubleshooting below for when you still might.
 
 ## Configuration
 
-`Meme Matcher` accepts a few constructor parameters:
+`MemeMatcher` accepts a few constructor parameters:
 
 | Parameter | Default | Description |
 |---|---|---|
 | `assets_folder` | `"assets"` | Folder containing meme images |
 | `frame_skip` | `2` | Only run full landmark detection every N frames (higher = faster, less responsive) |
 | `meme_height` | `480` | Height (px) memes are resized to when loaded |
-| `match_threshold` | `120` | Minimum similarity score required before a meme counts as a match; below this, the "Waiting..." placeholder is shown |
+| `match_threshold` | `120` | Minimum similarity score required before a meme counts as a match; below this, the loading animation is shown |
 
 Example:
 
