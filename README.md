@@ -65,7 +65,7 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
    git clone https://github.com/luoijin/Meme-matcher.git
    cd Meme-matcher
    ```
-3. (Recommended) create and activate a virtual environment:
+3. Create and activate a virtual environment:
    ```bash
    python3 -m venv venv
    source venv/bin/activate
@@ -92,7 +92,7 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
    git clone https://github.com/luoijin/Meme-matcher.git
    cd Meme-matcher
    ```
-3. (Recommended) create and activate a virtual environment:
+3. Create and activate a virtual environment:
    ```bash
    python3 -m venv venv
    source venv/bin/activate
