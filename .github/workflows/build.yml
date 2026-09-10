@@ -1,4 +1,4 @@
-name: Build Windows Exe
+name: Build Cross-Platform Executables
 
 on:
   push:
@@ -7,20 +7,37 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: Meme-Matcher-Windows.exe
+            asset_name: meme-matcher-windows.exe
+          - os: ubuntu-latest
+            artifact_name: Meme-Matcher-Linux
+            asset_name: meme-matcher-linux
+          - os: macos-latest
+            artifact_name: Meme-Matcher-macOS
+            asset_name: meme-matcher-macos
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build EXE
+      
+      - name: Build Executable
         run: pyinstaller --onefile --noconsole main.py
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Meme-Matcher-Windows
-          path: dist/main.exe
+          name: ${{ matrix.artifact_name }}
+          path: dist/*
