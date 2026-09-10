@@ -14,13 +14,13 @@ jobs:
         include:
           - os: windows-latest
             artifact_name: Meme-Matcher-Windows.exe
-            asset_name: meme-matcher-windows.exe
+            sep: ";"
           - os: ubuntu-latest
             artifact_name: Meme-Matcher-Linux
-            asset_name: meme-matcher-linux
+            sep: ":"
           - os: macos-latest
             artifact_name: Meme-Matcher-macOS
-            asset_name: meme-matcher-macos
+            sep: ":"
 
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,12 @@ jobs:
           pip install pyinstaller
       
       - name: Build Executable
-        run: pyinstaller --onefile --noconsole main.py
+        run: |
+          pyinstaller --onefile --noconsole \
+            --collect-all mediapipe \
+            --add-data "face_landmarker.task${{ matrix.sep }}." \
+            --add-data "hand_landmarker.task${{ matrix.sep }}." \
+            main.py
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
