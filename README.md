@@ -4,7 +4,7 @@ Match your live facial expression to the closest meme in your collection, in rea
 
 Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and hand landmark detection to score expressions (surprise, smile, concern, "cheers", pointing, thumbs-up, victory sign, etc.) and finds the meme image whose expression/gesture profile is the closest match to yours.
 
-### Direct Downloads
+### Direct Downloads (Ongoing fix :/ don't click)
 
 <p align="left">
   <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.1/main.exe">
