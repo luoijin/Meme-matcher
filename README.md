@@ -143,6 +143,6 @@ matcher.run()
 - **A meme never seems to match, even with the right expression**: if the meme involves a visible hand gesture, your hand also needs to be on the same side and in roughly the same position relative to your face as in the meme image — try mirroring the pose more closely, or lower `match_threshold`.
 - **Cache seems stuck / stale after bulk changes**: the cache is refreshed automatically per-image, but if you change `meme_height` or otherwise want a full rebuild, delete `meme_features_cache.pkl` to force re-extraction of every image.
 
-## [License](LICENSE)
+## License
 
 This project is licensed under the [MIT License](LICENSE).
