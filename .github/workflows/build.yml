@@ -41,6 +41,8 @@ jobs:
             --collect-all mediapipe \
             --add-data "face_landmarker.task${{ matrix.sep }}." \
             --add-data "hand_landmarker.task${{ matrix.sep }}." \
+            --add-data "memes_features_cache.pkl${{ matrix.sep }}." \
+            --add-data "memes${{ matrix.sep }}memes" \
             main.py
 
       - name: Upload Artifact

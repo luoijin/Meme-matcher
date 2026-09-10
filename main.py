@@ -11,14 +11,30 @@ import time
 import math
 from PIL import Image, ImageDraw, ImageFont
 
-def get_model_path(filename):
-    if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, filename)
-    return os.path.join(os.path.abspath('.'), filename)
 
-# 2. Define global constants outside the class
-FACE_MODEL_PATH = get_model_path('face_landmarker.task')
-HAND_MODEL_PATH = get_model_path('hand_landmarker.task')
+def get_model_path(filename):
+  """Get absolute path to resource, works for dev and for PyInstaller."""
+  if hasattr(sys, "_MEIPASS"):
+    return os.path.join(sys._MEIPASS, filename)
+  return os.path.join(os.path.abspath("."), filename)
+
+
+# Dynamic Asset Paths
+FACE_MODEL_PATH = get_model_path("face_landmarker.task")
+HAND_MODEL_PATH = get_model_path("hand_landmarker.task")
+MEMES_DIR = get_model_path("memes")
+CACHE_PATH = get_model_path("memes_features_cache.pkl")
+
+
+# Example loading logic for the cache file
+def load_meme_cache():
+  if os.path.exists(CACHE_PATH):
+    try:
+      with open(CACHE_PATH, "rb") as f:
+        return pickle.load(f)
+    except Exception as e:
+      print(f"Error loading cache: {e}")
+  return None
 
 class MemeMatcher:
     # MediaPipe landmark indices for facial features
