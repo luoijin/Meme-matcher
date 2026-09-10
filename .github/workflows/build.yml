@@ -1,0 +1,26 @@
+name: Build Windows Exe
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build EXE
+        run: pyinstaller --onefile --noconsole main.py
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Meme-Matcher-Windows
+          path: dist/main.exe
