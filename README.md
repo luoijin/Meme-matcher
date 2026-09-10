@@ -6,21 +6,10 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
 
 ### Direct Downloads 
 
-
-<p align="left">
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.exe">
-    <img src="https://img.shields.io/badge/Download-Windows_.exe-7C3AED?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows" />
-  </a>
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/Meme-Matcher-Linux">
-    <img src="https://img.shields.io/badge/Download-Linux_Binary-7C3AED?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux" />
-  </a>
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main">
-    <img src="https://img.shields.io/badge/Download-macOS_Binary-7C3AED?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS Binary" />
-  </a>
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.app.zip">
-    <img src="https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS App" />
-  </a>
-</p>
+[![Download Windows](https://img.shields.io/badge/Download-Windows_.exe-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.exe)
+[![Download Linux](https://img.shields.io/badge/Download-Linux_Binary-7C3AED?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/Meme-Matcher-Linux)
+[![Download macOS Binary](https://img.shields.io/badge/Download-macOS_Binary-7C3AED?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main)
+[![Download macOS App](https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.app.zip)
  
 
 ## How it works
