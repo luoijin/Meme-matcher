@@ -4,7 +4,9 @@ __pycache__/
 *$py.class
 *.so
 *.pyc
+*.py[cod]
 meme_features_cache.pkl
+
 
 # --- Virtual environments ---
 venv/
