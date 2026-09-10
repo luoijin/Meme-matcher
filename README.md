@@ -4,20 +4,23 @@ Match your live facial expression to the closest meme in your collection, in rea
 
 Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and hand landmark detection to score expressions (surprise, smile, concern, "cheers", pointing, thumbs-up, victory sign, etc.) and finds the meme image whose expression/gesture profile is the closest match to yours.
 
-### Direct Downloads (Ongoing fix :/ don't click)
+### Direct Downloads 
+
 
 <p align="left">
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.1/main.exe">
+  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.exe">
     <img src="https://img.shields.io/badge/Download-Windows_.exe-7C3AED?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows" />
   </a>
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.1/main">
+  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/Meme-Matcher-Linux">
     <img src="https://img.shields.io/badge/Download-Linux_Binary-7C3AED?style=for-the-badge&logo=linux&logoColor=white" alt="Download Linux" />
   </a>
-  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.1/meme-matcher-macos.zip">
-    <img src="https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS" />
+  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main">
+    <img src="https://img.shields.io/badge/Download-macOS_Binary-7C3AED?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS Binary" />
+  </a>
+  <a href="https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.app.zip">
+    <img src="https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS App" />
   </a>
 </p>
-
  
 
 ## How it works
