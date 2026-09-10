@@ -13,28 +13,49 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 def get_model_path(filename):
-  """Get absolute path to resource, works for dev and for PyInstaller."""
-  if hasattr(sys, "_MEIPASS"):
+  """Get absolute path to bundled resources (read-only)."""
+  if hasattr(sys, '_MEIPASS'):
     return os.path.join(sys._MEIPASS, filename)
-  return os.path.join(os.path.abspath("."), filename)
+  return os.path.join(os.path.abspath('.'), filename)
 
 
-# Dynamic Asset Paths
+# Dynamic Read-Only Asset Paths (Bundled in PyInstaller)
 FACE_MODEL_PATH = get_model_path("face_landmarker.task")
 HAND_MODEL_PATH = get_model_path("hand_landmarker.task")
 MEMES_DIR = get_model_path("memes")
-CACHE_PATH = get_model_path("memes_features_cache.pkl")
 
 
-# Example loading logic for the cache file
-def load_meme_cache():
+# Dynamic Writable Path (Generated at runtime on the user's machine)
+def get_writable_cache_path(filename="memes_features_cache.pkl"):
+  """Saves runtime cache to current working directory instead of read-only sys._MEIPASS."""
+  return os.path.join(os.getcwd(), filename)
+
+
+CACHE_PATH = get_writable_cache_path()
+
+
+# Cache Loading & Generation Logic
+def load_or_create_meme_cache():
   if os.path.exists(CACHE_PATH):
     try:
       with open(CACHE_PATH, "rb") as f:
+        print("[INFO] Loaded existing feature cache.")
         return pickle.load(f)
     except Exception as e:
-      print(f"Error loading cache: {e}")
-  return None
+      print(f"[WARNING] Corrupted cache detected, regenerating: {e}")
+
+  print("[INFO] Generating new feature cache for first-time setup...")
+  # Replace 'compute_meme_features()' with your actual feature generation function name
+  features = compute_meme_features()
+
+  try:
+    with open(CACHE_PATH, "wb") as f:
+      pickle.dump(features, f)
+    print(f"[INFO] Cache successfully saved to {CACHE_PATH}")
+  except Exception as e:
+    print(f"[ERROR] Failed to save cache to disk: {e}")
+
+  return features
 
 class MemeMatcher:
     # MediaPipe landmark indices for facial features
