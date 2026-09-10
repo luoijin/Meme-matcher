@@ -10,6 +10,15 @@ import time
 import math
 from PIL import Image, ImageDraw, ImageFont
 
+def get_model_path(filename):
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, filename)
+    return os.path.join(os.path.abspath('.'), filename)
+
+# 2. Define global constants outside the class
+FACE_MODEL_PATH = get_model_path('face_landmarker.task')
+HAND_MODEL_PATH = get_model_path('hand_landmarker.task')
+
 class MemeMatcher:
     # MediaPipe landmark indices for facial features
     LEFT_EYE_UPPER = [150, 145, 158]
@@ -41,14 +50,14 @@ class MemeMatcher:
         self.missing_face_frames = 0
         self.MISSING_FRAME_THRESHOLD = 5
 
-        self.face_model_path = self._download_model(
-            "face_landmarker.task",
-            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
-        )
-        self.hand_model_path = self._download_model(
-            "hand_landmarker.task",
-            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
-        )
+        # self.face_model_path = self._download_model(
+        #     "face_landmarker.task",
+        #     "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+        # )
+        # self.hand_model_path = self._download_model(
+        #     "hand_landmarker.task",
+        #     "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+        # )
 
         self.face_mesh_video = self._init_face_landmarker(video_mode=True)
         self.hand_detector_video = self._init_hand_landmarker(video_mode=True)
@@ -109,28 +118,44 @@ class MemeMatcher:
         return model_path
 
     def _init_face_landmarker(self, video_mode=True):
-        mode = mp.tasks.vision.RunningMode.VIDEO if video_mode else mp.tasks.vision.RunningMode.IMAGE
+        mode = (
+            mp.tasks.vision.RunningMode.VIDEO
+            if video_mode
+            else mp.tasks.vision.RunningMode.IMAGE
+        )
+
+        # Use the dynamically resolved bundled path
+        model_path = get_model_path("face_landmarker.task")
+
         return mp.tasks.vision.FaceLandmarker.create_from_options(
             mp.tasks.vision.FaceLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=self.face_model_path),
+                base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
                 running_mode=mode,
                 num_faces=1,
                 min_face_detection_confidence=0.5 if video_mode else 0.3,
                 min_face_presence_confidence=0.5 if video_mode else 0.3,
-                min_tracking_confidence=0.5 if video_mode else 0.0
+                min_tracking_confidence=0.5 if video_mode else 0.0,
             )
         )
 
     def _init_hand_landmarker(self, video_mode=True):
-        mode = mp.tasks.vision.RunningMode.VIDEO if video_mode else mp.tasks.vision.RunningMode.IMAGE
+        mode = (
+            mp.tasks.vision.RunningMode.VIDEO
+            if video_mode
+            else mp.tasks.vision.RunningMode.IMAGE
+        )
+
+        # Use the dynamically resolved bundled path
+        model_path = get_model_path('hand_landmarker.task')
+
         return mp.tasks.vision.HandLandmarker.create_from_options(
             mp.tasks.vision.HandLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=self.hand_model_path),
+                base_options=mp.tasks.BaseOptions(model_asset_path=model_path),
                 running_mode=mode,
                 num_hands=2,
-                min_hand_detection_confidence=0.3,
-                min_hand_presence_confidence=0.3,
-                min_tracking_confidence=0.3 if video_mode else 0.0
+                min_hand_detection_confidence=0.5 if video_mode else 0.3,
+                min_hand_presence_confidence=0.5 if video_mode else 0.3,
+                min_tracking_confidence=0.5 if video_mode else 0.0,
             )
         )
 
