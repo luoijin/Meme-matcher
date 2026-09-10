@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyc
+meme_features_cache.pkl
 
 # --- Virtual environments ---
 venv/
@@ -12,9 +14,6 @@ ENV/
 
 face_landmarker.task
 hand_landmarker.task
-
-# Cached feature extraction (regenerated automatically, and machine/version specific)
-meme_features_cache.pkl
 
 # --- OS junk ---
 .DS_Store
