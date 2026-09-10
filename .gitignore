@@ -14,9 +14,6 @@ venv/
 env/
 ENV/
 
-face_landmarker.task
-hand_landmarker.task
-
 # --- OS junk ---
 .DS_Store
 Thumbs.db
