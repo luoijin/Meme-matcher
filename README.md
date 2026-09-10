@@ -4,6 +4,11 @@ Match your live facial expression to the closest meme in your collection, in rea
 
 Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and hand landmark detection to score expressions (surprise, smile, concern, "cheers", pointing, thumbs-up, victory sign, etc.) and finds the meme image whose expression/gesture profile is the closest match to yours.
 
+[![Download main.exe](https://img.shields.io/badge/Download-main.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.0/main.exe)
+ 
+Prebuilt Windows executable — no Python or dependencies required. Just download and run.
+ 
+
 ## How it works
 
 1. On startup, Meme Matcher downloads the MediaPipe `face_landmarker.task` and `hand_landmarker.task` models (only once — they're cached locally).
