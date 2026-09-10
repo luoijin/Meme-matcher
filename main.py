@@ -551,43 +551,59 @@ class MemeMatcher:
             print("Error: Could not open camera")
             return
 
-        print("\n Camera started! Press 'q' to quit\n")
+        print("\n Camera started! Press 'q' or click 'X' to quit\n")
+        
+        window_name = "Meme Matcher"
+        cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame = cv2.flip(frame, 1)
-            h, w = frame.shape[:2]
+        try:
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                frame = cv2.flip(frame, 1)
+                h, w = frame.shape[:2]
 
-            user_features = self.extract_face_features(frame)
-            best_meme, score = self.find_best_match(user_features)
-            matched = best_meme is not None and score >= self.match_threshold
+                user_features = self.extract_face_features(frame)
+                best_meme, score = self.find_best_match(user_features)
+                matched = best_meme is not None and score >= self.match_threshold
 
-            if matched:
-                meme_img = best_meme['image']
-                meme_h, meme_w = meme_img.shape[:2]
-                scale = h / meme_h
-                panel_w = int(meme_w * scale)
-                meme_panel = cv2.resize(meme_img, (panel_w, h))
-            else:
-                panel_w = max(1, int(h * self.meme_aspect_ratio))
-                meme_panel = np.full((h, panel_w, 3), (30, 27, 24), dtype=np.uint8)
+                if matched:
+                    meme_img = best_meme['image']
+                    meme_h, meme_w = meme_img.shape[:2]
+                    scale = h / meme_h
+                    panel_w = int(meme_w * scale)
+                    meme_panel = cv2.resize(meme_img, (panel_w, h))
+                else:
+                    panel_w = max(1, int(h * self.meme_aspect_ratio))
+                    meme_panel = np.full((h, panel_w, 3), (30, 27, 24), dtype=np.uint8)
 
-            display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
-            display[:, :w] = frame
-            display[:, w:w + panel_w] = meme_panel
+                display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
+                display[:, :w] = frame
+                display[:, w:w + panel_w] = meme_panel
 
-            cv2.line(display, (w, 0), (w, h), (40, 40, 40), 2)
+                cv2.line(display, (w, 0), (w, h), (40, 40, 40), 2)
 
-            display = self._draw_modern_ui(display, w, h, panel_w, best_meme, score, matched, user_features)
+                display = self._draw_modern_ui(display, w, h, panel_w, best_meme, score, matched, user_features)
 
-            cv2.imshow("Meme Matcher", display)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+                cv2.imshow(window_name, display)
 
-        cap.release()
-        cv2.destroyAllWindows()
+                # Key press check
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+
+                # Safe window close (X) check for Qt/X11 backends
+                try:
+                    if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                        break
+                except cv2.error:
+                    # Window was destroyed by user clicking 'X'
+                    break
+
+        finally:
+            cap.release()
+            cv2.destroyAllWindows()
+            print("[INFO] Application closed successfully.")
 
 
 if __name__ == "__main__":
