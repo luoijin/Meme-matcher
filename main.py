@@ -6,6 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 import pickle
 import os
 import subprocess
+import time
+import math
+from PIL import Image, ImageDraw, ImageFont
 
 class MemeMatcher:
     # MediaPipe landmark indices for facial features
@@ -52,18 +55,15 @@ class MemeMatcher:
         self.memes = []
         self.meme_features = []
 
-        # Expanded feature set including granular hand/gesture metrics
         self.feature_keys = [
             'surprise_score', 'smile_score', 'concern_score', 'cheers_score', 
             'hand_raised', 'num_hands', 'eye_openness', 'eyes_symmetry', 
             'mouth_openness', 'mouth_width_ratio', 'mouth_elevation', 
             'eyebrow_height', 'brow_symmetry',
             'pointing_score', 'thumbs_up_score', 'victory_score', 'hand_near_face',
-            # New mirror matching coordinates
             'rel_hand_x', 'rel_hand_y', 'active_hand_side'
         ]
 
-        # Configured weights and scaling factors for similarity matching
         self.feature_weights = np.array([25, 20, 20, 30, 25, 15, 20, 10, 25, 20, 15, 20, 10, 30, 30, 30, 25, 25, 25, 20])
         self.feature_factors = np.array([10, 10, 10, 10, 15, 15, 5, 5, 5, 5, 5, 5, 5, 12, 12, 12, 12, 4, 4, 10])
 
@@ -74,6 +74,27 @@ class MemeMatcher:
             self.meme_aspect_ratio = float(np.mean(aspects))
         else:
             self.meme_aspect_ratio = 1.0
+
+        # Load system font for modern UI overlay
+        self.font_title = self._get_font(22, bold=True)
+        self.font_subtitle = self._get_font(15, bold=False)
+        self.font_status = self._get_font(14, bold=True)
+
+    def _get_font(self, size, bold=False):
+        """Attempts to load common system fonts or falls back to default PIL font."""
+        font_names = [
+            "arial.ttf", "segoeui.ttf", "SF-Pro-Display-Regular.otf", 
+            "Helvetica.ttf", "DejaVuSans.ttf"
+        ]
+        if bold:
+            font_names = ["arialbd.ttf", "segoeuib.ttf", "SF-Pro-Display-Bold.otf", "DejaVuSans-Bold.ttf"] + font_names
+
+        for name in font_names:
+            try:
+                return ImageFont.truetype(name, size)
+            except OSError:
+                continue
+        return ImageFont.load_default()
 
     def _download_model(self, model_path, url):
         if not os.path.exists(model_path):
@@ -233,7 +254,6 @@ class MemeMatcher:
         return features
 
     def _compute_features(self, landmark_array, hand_result):
-        # --- Face Features ---
         def ear(upper, lower):
             vertical = np.linalg.norm(landmark_array[upper] - landmark_array[lower], axis=1).mean()
             horizontal = np.linalg.norm(landmark_array[upper[0]] - landmark_array[upper[-1]])
@@ -263,7 +283,6 @@ class MemeMatcher:
         nose_tip = landmark_array[self.NOSE_TIP]
         mouth_elev = nose_tip[1] - mouth_center_y
 
-        # --- Enhanced Hand & Mirror Position Features ---
         num_hands = len(hand_result.hand_landmarks) if hand_result.hand_landmarks else 0
         hand_raised = 0.0
         pointing_score = 0.0
@@ -271,10 +290,9 @@ class MemeMatcher:
         victory_score = 0.0
         hand_near_face = 0.0
         
-        # Mirroring spatial tracking: Relative position of hand to face
-        rel_hand_x = 0.0  # -1.0 (Left of face) to +1.0 (Right of face)
-        rel_hand_y = 0.0  # -1.0 (Above face) to +1.0 (Below face)
-        active_hand_side = 0.0  # 1.0 for Left Hand, 2.0 for Right Hand, 3.0 for Both
+        rel_hand_x = 0.0
+        rel_hand_y = 0.0
+        active_hand_side = 0.0
 
         face_center = landmark_array.mean(axis=0)
         face_width = np.linalg.norm(landmark_array[454] - landmark_array[234]) + 1e-6
@@ -283,30 +301,26 @@ class MemeMatcher:
             sides = []
             for hand_landmarks, handedness in zip(hand_result.hand_landmarks, hand_result.handedness):
                 pts = np.array([[lm.x, lm.y] for lm in hand_landmarks])
-                label = handedness[0].category_name  # "Left" or "Right"
+                label = handedness[0].category_name
                 sides.append(1.0 if label == "Left" else 2.0)
 
-                # Vector Angle-based finger extension (joint curvature)
                 def get_finger_angle(p1, p2, p3):
                     v1 = p1 - p2
                     v2 = p3 - p2
                     cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-6)
                     return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
 
-                # Joints > 150 deg are extended straight; < 120 deg are bent
                 index_ext = get_finger_angle(pts[self.INDEX_MCP], pts[self.INDEX_PIP], pts[self.INDEX_TIP]) > 140
                 middle_ext = get_finger_angle(pts[self.MIDDLE_MCP], pts[self.MIDDLE_PIP], pts[self.MIDDLE_TIP]) > 140
                 ring_ext = get_finger_angle(pts[self.RING_MCP], pts[self.RING_PIP], pts[self.RING_TIP]) > 140
                 pinky_ext = get_finger_angle(pts[self.PINKY_MCP], pts[self.PINKY_PIP], pts[self.PINKY_TIP]) > 140
                 thumb_ext = get_finger_angle(pts[self.THUMB_MCP], pts[self.THUMB_IP], pts[self.THUMB_TIP]) > 130
 
-                # Compute Hand Offset relative to Face Center (Normalized to Face Width)
                 wrist_pt = pts[self.WRIST]
                 offset = (wrist_pt - face_center) / face_width
                 rel_hand_x = float(np.clip(offset[0], -2.0, 2.0))
                 rel_hand_y = float(np.clip(offset[1], -2.0, 2.0))
 
-                # Distance check to face
                 min_dist_to_face = np.min(np.linalg.norm(pts - face_center, axis=1)) / face_width
                 if min_dist_to_face < 0.8:
                     hand_near_face = 1.0
@@ -314,7 +328,6 @@ class MemeMatcher:
                 if wrist_pt[1] < face_center[1] + 0.2:
                     hand_raised = 1.0
 
-                # Gesture classification
                 if index_ext and not middle_ext and not ring_ext and not pinky_ext:
                     pointing_score = 1.0
                 elif thumb_ext and not index_ext and not middle_ext and not ring_ext and not pinky_ext:
@@ -343,7 +356,6 @@ class MemeMatcher:
             'smile_score': mouth_width_ratio * (1.0 - mouth_ar),
             'concern_score': avg_brow_h * (1.0 - mouth_elev),
             'cheers_score': mouth_width_ratio * (1.0 - mouth_ar) * hand_raised,
-            # Enhanced hand features
             'pointing_score': pointing_score,
             'thumbs_up_score': thumbs_up_score,
             'victory_score': victory_score,
@@ -369,7 +381,6 @@ class MemeMatcher:
         best_meme = None
         best_score = 0.0
 
-        # Define keys strictly tied to face vs. hands
         face_keys = [
             'surprise_score', 'smile_score', 'concern_score', 'eye_openness', 
             'eyes_symmetry', 'mouth_openness', 'mouth_width_ratio', 
@@ -380,21 +391,17 @@ class MemeMatcher:
             'thumbs_up_score', 'victory_score', 'hand_near_face'
         ]
 
-        # Extract weights corresponding to face vs. hand features
         key_to_weight = dict(zip(self.feature_keys, self.feature_weights))
         face_weight_sum = sum(key_to_weight[k] for k in face_keys)
         hand_weight_sum = sum(key_to_weight[k] for k in hand_keys)
 
         for meme, mf in zip(self.memes, self.meme_features):
-            # Calculate component similarities
             face_sim = self._sub_similarity(user_features, mf, face_keys)
             hand_sim = self._sub_similarity(user_features, mf, hand_keys)
 
-            # Normalized sub-scores (range: 0.0 to 1.0)
             face_ratio = face_sim / (face_weight_sum + 1e-6)
             hand_ratio = hand_sim / (hand_weight_sum + 1e-6)
 
-            # 1. Hard Check: Does this meme require a hand gesture?
             meme_has_gesture = (
                 mf['hand_raised'] > 0.5 or 
                 mf['pointing_score'] > 0.5 or 
@@ -403,19 +410,13 @@ class MemeMatcher:
                 mf['hand_near_face'] > 0.5
             )
 
-            # 2. Strict Double-Gated Matching Logic
             if meme_has_gesture:
-                # If meme has a hand gesture, BOTH face and hand must pass strict criteria (> 50% match quality each)
-
                 if abs(mf['active_hand_side'] - user_features['active_hand_side']) > 0.5:
                     continue
                 if abs(mf['rel_hand_x'] - user_features['rel_hand_x']) > 0.8:
                     continue
-                
                 if face_ratio < 0.5 or hand_ratio < 0.5:
-                    continue  # Fail match instantly if either hands or face don't match
-                
-                # Check for specific gesture mismatches (e.g., meme requires pointing, user isn't pointing)
+                    continue
                 if mf['pointing_score'] > 0.5 and user_features['pointing_score'] < 0.5:
                     continue
                 if mf['thumbs_up_score'] > 0.5 and user_features['thumbs_up_score'] < 0.5:
@@ -423,13 +424,11 @@ class MemeMatcher:
                 if mf['victory_score'] > 0.5 and user_features['victory_score'] < 0.5:
                     continue
             else:
-                # If meme is face-only, penalize if user is raising hands unexpectedly
                 if user_features['hand_raised'] > 0.5 or user_features['pointing_score'] > 0.5:
                     continue
                 if face_ratio < 0.5:
                     continue
 
-            # Combined score calculation
             total_score = face_sim + hand_sim
             if total_score > best_score:
                 best_score = total_score
@@ -438,7 +437,6 @@ class MemeMatcher:
         return best_meme, best_score
 
     def _sub_similarity(self, f1, f2, keys):
-        """Computes similarity subset for a specific group of features."""
         key_map = {k: i for i, k in enumerate(self.feature_keys)}
         indices = [key_map[k] for k in keys]
         
@@ -451,6 +449,64 @@ class MemeMatcher:
         sim = np.exp(-diff * factors)
         return float(np.sum(weights * sim))
 
+    def _draw_dots_loader(self, draw, panel_x, panel_w, panel_h):
+        """Renders an animated 3-dot loading indicator at the center of the meme panel."""
+        t = time.time() * 5  # Speed of wave effect
+        
+        dot_radius = 8
+        spacing = 28
+        center_x = panel_x + (panel_w // 2)
+        center_y = panel_h // 2
+
+        # Draw 3 dots with staggered phase shifts for a smooth wave motion
+        for i in range(3):
+            # Calculate horizontal offset (-spacing, 0, +spacing)
+            offset_x = (i - 1) * spacing
+            cx = center_x + offset_x
+            
+            # Sinusoidal offset for vertical bounce + opacity pulse
+            phase = t - (i * 0.5)
+            bounce_y = int(6 * math.sin(phase))
+            cy = center_y + bounce_y
+            
+            # Alpha pulses between 70 and 230
+            alpha = int(150 + 80 * math.sin(phase))
+            dot_color = (255, 255, 255, max(40, alpha))
+
+            # Draw dot
+            draw.ellipse(
+                [cx - dot_radius, cy - dot_radius, cx + dot_radius, cy + dot_radius],
+                fill=dot_color
+            )
+
+    def _draw_modern_ui(self, display_img, w, h, panel_w, best_meme, score, matched, user_features):
+        """Renders an overlay with semi-translucent status pill and centered 3-dot loading animation."""
+        img_pil = Image.fromarray(cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB)).convert("RGBA")
+        overlay = Image.new("RGBA", img_pil.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # 1. Floating User Status Pill (Top Left)
+        if user_features is None:
+            pill_text = "No face detected"
+            pill_color = (239, 68, 68, 200)  # Red
+        else:
+            pill_text = "Tracking active"
+            pill_color = (16, 185, 129, 180)  # Green
+
+        tb = draw.textbbox((0, 0), pill_text, font=self.font_status)
+        pw, ph = tb[2] - tb[0] + 24, tb[3] - tb[1] + 12
+        draw.rounded_rectangle([16, 16, 16 + pw, 16 + ph], radius=12, fill=pill_color)
+        draw.text((28, 20), pill_text, font=self.font_status, fill=(255, 255, 255, 255))
+
+        # 2. Meme Area UI
+        if not matched:
+            # Display centered 3-dot animated wave loader while searching
+            self._draw_dots_loader(draw, w, panel_w, h)
+
+        # Composite overlay onto main image
+        combined = Image.alpha_composite(img_pil, overlay)
+        return cv2.cvtColor(np.array(combined.convert("RGB")), cv2.COLOR_RGB2BGR)
+
     def run(self):
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -460,7 +516,7 @@ class MemeMatcher:
             print("Error: Could not open camera")
             return
 
-        print("\n🎥 Camera started! Press 'q' to quit\n")
+        print("\n Camera started! Press 'q' to quit\n")
 
         while cap.isOpened():
             ret, frame = cap.read()
@@ -481,35 +537,21 @@ class MemeMatcher:
                 meme_panel = cv2.resize(meme_img, (panel_w, h))
             else:
                 panel_w = max(1, int(h * self.meme_aspect_ratio))
-                meme_panel = np.full((h, panel_w, 3), 25, dtype=np.uint8)
-                placeholder = "..."
-                (tw, th), _ = cv2.getTextSize(placeholder, cv2.FONT_HERSHEY_SIMPLEX, 1.5, 3)
-                cv2.putText(
-                    meme_panel, placeholder,
-                    ((panel_w - tw) // 2, (h + th) // 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (90, 90, 90), 3
-                )
+                # Dark slate modern background for placeholder
+                meme_panel = np.full((h, panel_w, 3), (30, 27, 24), dtype=np.uint8)
 
+            # Assemble split screen
             display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
             display[:, :w] = frame
             display[:, w:w + panel_w] = meme_panel
 
-            cv2.rectangle(display, (5, 5), (200, 45), (0, 0, 0), -1)
-            cv2.putText(display, "YOU", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
+            # Draw subtle vertical divider line between video feeds
+            cv2.line(display, (w, 0), (w, h), (40, 40, 40), 2)
 
-            if user_features is None:
-                cv2.putText(display, "No face detected", (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            # Apply UI rendering
+            display = self._draw_modern_ui(display, w, h, panel_w, best_meme, score, matched, user_features)
 
-            if matched:
-                cv2.rectangle(display, (w + 5, 5), (w + panel_w - 5, 75), (0, 0, 0), -1)
-                cv2.putText(display, best_meme['name'], (w + 10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-                cv2.putText(display, f"Match: {score:.1f}", (w + 10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-            else:
-                cv2.rectangle(display, (w + 5, 5), (w + panel_w - 5, 45), (0, 0, 0), -1)
-                readout = f"Waiting... ({score:.0f}/{self.match_threshold:.0f})" if best_meme else "Waiting for face..."
-                cv2.putText(display, readout, (w + 10, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 2)
-
-            cv2.imshow("Meme Matcher - Press Q to quit ^^", display)
+            cv2.imshow("Meme Matcher", display)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
