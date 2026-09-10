@@ -22,8 +22,7 @@ def get_model_path(filename):
 # Dynamic Read-Only Asset Paths (Bundled in PyInstaller)
 FACE_MODEL_PATH = get_model_path("face_landmarker.task")
 HAND_MODEL_PATH = get_model_path("hand_landmarker.task")
-MEMES_DIR = get_model_path("memes")
-
+MEMES_DIR = get_model_path("assets")
 
 # Dynamic Writable Path (Generated at runtime on the user's machine)
 def get_writable_cache_path(filename="memes_features_cache.pkl"):
