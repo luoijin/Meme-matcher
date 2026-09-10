@@ -37,6 +37,9 @@ class MemeMatcher:
         self.frame_skip = frame_skip
         self.meme_height = meme_height
         self.match_threshold = match_threshold
+        self.tracking_active = False
+        self.missing_face_frames = 0
+        self.MISSING_FRAME_THRESHOLD = 5
 
         self.face_model_path = self._download_model(
             "face_landmarker.task",
@@ -75,7 +78,6 @@ class MemeMatcher:
         else:
             self.meme_aspect_ratio = 1.0
 
-        # Load system font for modern UI overlay
         self.font_title = self._get_font(22, bold=True)
         self.font_subtitle = self._get_font(15, bold=False)
         self.font_status = self._get_font(14, bold=True)
@@ -238,18 +240,22 @@ class MemeMatcher:
             hand_result = hand_landmarker.detect(mp_image)
         else:
             self.frame_counter += 1
-            if self.frame_counter % self.frame_skip != 0:
-                return getattr(self, "last_features", None)
             timestamp = int(self.frame_counter * 33)
+            
+            if self.frame_counter % self.frame_skip != 0:
+                return self.last_features
+                
             face_result = face_landmarker.detect_for_video(mp_image, timestamp)
             hand_result = hand_landmarker.detect_for_video(mp_image, timestamp)
 
         if not face_result.face_landmarks:
+            self.last_features = None
             return None
 
         landmarks = face_result.face_landmarks[0]
         landmark_array = np.array([[l.x, l.y] for l in landmarks])
         features = self._compute_features(landmark_array, hand_result)
+        
         self.last_features = features
         return features
 
@@ -458,52 +464,68 @@ class MemeMatcher:
         center_x = panel_x + (panel_w // 2)
         center_y = panel_h // 2
 
-        # Draw 3 dots with staggered phase shifts for a smooth wave motion
         for i in range(3):
-            # Calculate horizontal offset (-spacing, 0, +spacing)
             offset_x = (i - 1) * spacing
             cx = center_x + offset_x
             
-            # Sinusoidal offset for vertical bounce + opacity pulse
             phase = t - (i * 0.5)
             bounce_y = int(6 * math.sin(phase))
             cy = center_y + bounce_y
             
-            # Alpha pulses between 70 and 230
             alpha = int(150 + 80 * math.sin(phase))
             dot_color = (255, 255, 255, max(40, alpha))
 
-            # Draw dot
             draw.ellipse(
                 [cx - dot_radius, cy - dot_radius, cx + dot_radius, cy + dot_radius],
                 fill=dot_color
             )
 
     def _draw_modern_ui(self, display_img, w, h, panel_w, best_meme, score, matched, user_features):
-        """Renders an overlay with semi-translucent status pill and centered 3-dot loading animation."""
+        
+        MISSING_FRAME_THRESHOLD = 3  # ~100ms response time
+        
+        if user_features is None:
+            self.missing_face_frames += 1
+            if self.missing_face_frames >= MISSING_FRAME_THRESHOLD:
+                self.tracking_active = False
+        else:
+            self.missing_face_frames = 0
+            self.tracking_active = True
+
         img_pil = Image.fromarray(cv2.cvtColor(display_img, cv2.COLOR_BGR2RGB)).convert("RGBA")
         overlay = Image.new("RGBA", img_pil.size, (255, 255, 255, 0))
         draw = ImageDraw.Draw(overlay)
 
         # 1. Floating User Status Pill (Top Left)
-        if user_features is None:
+        if not self.tracking_active:
             pill_text = "No face detected"
-            pill_color = (239, 68, 68, 200)  # Red
+            pill_color = (220, 38, 38, 210)  
+            dot_color = (248, 113, 113, 255)
         else:
             pill_text = "Tracking active"
-            pill_color = (16, 185, 129, 180)  # Green
+            pill_color = (16, 185, 129, 210)  
+            dot_color = (110, 231, 183, 255)
 
         tb = draw.textbbox((0, 0), pill_text, font=self.font_status)
-        pw, ph = tb[2] - tb[0] + 24, tb[3] - tb[1] + 12
-        draw.rounded_rectangle([16, 16, 16 + pw, 16 + ph], radius=12, fill=pill_color)
-        draw.text((28, 20), pill_text, font=self.font_status, fill=(255, 255, 255, 255))
+        text_w, text_h = tb[2] - tb[0], tb[3] - tb[1]
+        
+        pill_x1, pill_y1 = 18, 18
+        pill_x2, pill_y2 = pill_x1 + text_w + 42, pill_y1 + text_h + 16
+        
+        draw.rounded_rectangle([pill_x1, pill_y1, pill_x2, pill_y2], radius=14, fill=pill_color)
+        
+        dot_center = (pill_x1 + 16, pill_y1 + (pill_y2 - pill_y1) // 2)
+        draw.ellipse(
+            [dot_center[0] - 4, dot_center[1] - 4, dot_center[0] + 4, dot_center[1] + 4], 
+            fill=dot_color
+        )
+        
+        draw.text((pill_x1 + 28, pill_y1 + 7), pill_text, font=self.font_status, fill=(255, 255, 255, 255))
 
         # 2. Meme Area UI
         if not matched:
-            # Display centered 3-dot animated wave loader while searching
             self._draw_dots_loader(draw, w, panel_w, h)
 
-        # Composite overlay onto main image
         combined = Image.alpha_composite(img_pil, overlay)
         return cv2.cvtColor(np.array(combined.convert("RGB")), cv2.COLOR_RGB2BGR)
 
@@ -537,18 +559,14 @@ class MemeMatcher:
                 meme_panel = cv2.resize(meme_img, (panel_w, h))
             else:
                 panel_w = max(1, int(h * self.meme_aspect_ratio))
-                # Dark slate modern background for placeholder
                 meme_panel = np.full((h, panel_w, 3), (30, 27, 24), dtype=np.uint8)
 
-            # Assemble split screen
             display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
             display[:, :w] = frame
             display[:, w:w + panel_w] = meme_panel
 
-            # Draw subtle vertical divider line between video feeds
             cv2.line(display, (w, 0), (w, h), (40, 40, 40), 2)
 
-            # Apply UI rendering
             display = self._draw_modern_ui(display, w, h, panel_w, best_meme, score, matched, user_features)
 
             cv2.imshow("Meme Matcher", display)
