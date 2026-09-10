@@ -18,16 +18,23 @@ class MemeMatcher:
     MOUTH_OUTER = [61, 291, 39, 181, 0, 17, 269, 405]
     NOSE_TIP = 4
 
+    # Hand Landmark Indices
+    WRIST = 0
+    THUMB_TIP, THUMB_IP, THUMB_MCP = 4, 3, 2
+    INDEX_TIP, INDEX_PIP, INDEX_MCP = 8, 6, 5
+    MIDDLE_TIP, MIDDLE_PIP, MIDDLE_MCP = 12, 10, 9
+    RING_TIP, RING_PIP, RING_MCP = 16, 14, 13
+    PINKY_TIP, PINKY_PIP, PINKY_MCP = 20, 18, 17
+
     CACHE_FILE = "meme_features_cache.pkl"
 
-    def __init__(self, assets_folder="assets", frame_skip=2, meme_height=480, match_threshold=170):
+    def __init__(self, assets_folder="assets", frame_skip=2, meme_height=480, match_threshold=120):
         self.last_features = None
         self.frame_counter = 0
         self.frame_skip = frame_skip
         self.meme_height = meme_height
         self.match_threshold = match_threshold
 
-        # Download both face and hand models
         self.face_model_path = self._download_model(
             "face_landmarker.task",
             "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
@@ -45,15 +52,19 @@ class MemeMatcher:
         self.memes = []
         self.meme_features = []
 
+        # Expanded feature set including granular hand/gesture metrics
         self.feature_keys = [
             'surprise_score', 'smile_score', 'concern_score', 'cheers_score', 
             'hand_raised', 'num_hands', 'eye_openness', 'eyes_symmetry', 
             'mouth_openness', 'mouth_width_ratio', 'mouth_elevation', 
-            'eyebrow_height', 'brow_symmetry'
+            'eyebrow_height', 'brow_symmetry',
+            # New gesture features:
+            'pointing_score', 'thumbs_up_score', 'victory_score', 'hand_near_face'
         ]
 
-        self.feature_weights = np.array([25, 20, 20, 30, 25, 15, 20, 10, 25, 20, 15, 20, 10])
-        self.feature_factors = np.array([10, 10, 10, 10, 15, 15, 5, 5, 5, 5, 5, 5, 5])
+        # Configured weights and scaling factors for similarity matching
+        self.feature_weights = np.array([25, 20, 20, 30, 25, 15, 20, 10, 25, 20, 15, 20, 10, 30, 30, 30, 25])
+        self.feature_factors = np.array([10, 10, 10, 10, 15, 15, 5, 5, 5, 5, 5, 5, 5, 12, 12, 12, 12])
 
         self.load_memes(assets_folder)
 
@@ -100,7 +111,6 @@ class MemeMatcher:
         )
 
     def _file_signature(self, img_file):
-        """A signature that changes if the file is edited/replaced or meme_height changes."""
         stat = img_file.stat()
         return (stat.st_mtime, stat.st_size, self.meme_height)
 
@@ -177,7 +187,6 @@ class MemeMatcher:
         else:
             print("No new or changed images - using cached features for all of them.")
 
-        # Rebuild self.memes / self.meme_features in a stable, sorted order.
         self.memes = []
         self.meme_features = []
         for img_file in image_files:
@@ -255,16 +264,49 @@ class MemeMatcher:
         nose_tip = landmark_array[self.NOSE_TIP]
         mouth_elev = nose_tip[1] - mouth_center_y
 
-        # Hands
+        # Process Hand Landmarks & Specific Gestures
         num_hands = len(hand_result.hand_landmarks) if hand_result.hand_landmarks else 0
         hand_raised = 0.0
+        pointing_score = 0.0
+        thumbs_up_score = 0.0
+        victory_score = 0.0
+        hand_near_face = 0.0
+
+        face_center = landmark_array.mean(axis=0)
+
         if num_hands > 0:
-            face_center = landmark_array[:, 1].mean()
-            face_top = landmark_array[:, 1].min()
-            wrist_y = np.array([h[0].y for h in hand_result.hand_landmarks])
-            middle_y = np.array([h[12].y for h in hand_result.hand_landmarks])
-            if np.any((middle_y < face_center + 0.2) | (wrist_y < face_top + 0.3)):
-                hand_raised = 1.0
+            for hand_landmarks in hand_result.hand_landmarks:
+                # Convert normalized landmarks to numpy array (N x 2)
+                pts = np.array([[lm.x, lm.y] for lm in hand_landmarks])
+
+                # Determine extended state for each finger
+                index_extended = pts[self.INDEX_TIP, 1] < pts[self.INDEX_PIP, 1]
+                middle_extended = pts[self.MIDDLE_TIP, 1] < pts[self.MIDDLE_PIP, 1]
+                ring_extended = pts[self.RING_TIP, 1] < pts[self.RING_PIP, 1]
+                pinky_extended = pts[self.PINKY_TIP, 1] < pts[self.PINKY_PIP, 1]
+                thumb_extended = pts[self.THUMB_TIP, 1] < pts[self.THUMB_IP, 1]
+
+                # Check general hand elevation relative to face
+                face_top = landmark_array[:, 1].min()
+                if pts[self.WRIST, 1] < face_center[1] + 0.15 or pts[self.MIDDLE_TIP, 1] < face_top + 0.1:
+                    hand_raised = 1.0
+
+                # Measure hand proximity to face (for facepalm / thinking memes)
+                min_dist_to_face = np.min(np.linalg.norm(pts - face_center, axis=1))
+                if min_dist_to_face < 0.25:
+                    hand_near_face = 1.0
+
+                # Pointing gesture detection (Index extended, others folded)
+                if index_extended and not middle_extended and not ring_extended and not pinky_extended:
+                    pointing_score = 1.0
+
+                # Thumbs-up detection (Thumb extended upward, all other fingers folded)
+                if thumb_extended and not index_extended and not middle_extended and not ring_extended and not pinky_extended:
+                    thumbs_up_score = 1.0
+
+                # Victory/Peace sign detection (Index and Middle extended)
+                if index_extended and middle_extended and not ring_extended and not pinky_extended:
+                    victory_score = 1.0
 
         return {
             'eye_openness': avg_ear,
@@ -284,7 +326,12 @@ class MemeMatcher:
             'surprise_score': avg_ear * avg_brow_h * mouth_ar,
             'smile_score': mouth_width_ratio * (1.0 - mouth_ar),
             'concern_score': avg_brow_h * (1.0 - mouth_elev),
-            'cheers_score': mouth_width_ratio * (1.0 - mouth_ar) * hand_raised
+            'cheers_score': mouth_width_ratio * (1.0 - mouth_ar) * hand_raised,
+            # Gesture features
+            'pointing_score': pointing_score,
+            'thumbs_up_score': thumbs_up_score,
+            'victory_score': victory_score,
+            'hand_near_face': hand_near_face
         }
 
     def compute_similarity(self, features1, features2):
@@ -304,14 +351,6 @@ class MemeMatcher:
             return None, 0.0
         best_match_idx = np.argmax(scores)
         return self.memes[best_match_idx], scores[best_match_idx]
-
-    def _draw_glass_card(self, overlay, x, y, width, height, alpha=0.55, color=(20, 20, 20)):
-        """Renders a translucent glassmorphic panel with a light highlight border."""
-        sub = overlay[y:y+height, x:x+width]
-        rect = np.full_like(sub, color, dtype=np.uint8)
-        cv2.addWeighted(rect, alpha, sub, 1 - alpha, 0, sub)
-        
-        cv2.rectangle(overlay, (x, y), (x + width, y + height), (255, 255, 255), 1, cv2.LINE_AA)
 
     def run(self):
         cap = cv2.VideoCapture(0)
@@ -343,34 +382,35 @@ class MemeMatcher:
                 meme_panel = cv2.resize(meme_img, (panel_w, h))
             else:
                 panel_w = max(1, int(h * self.meme_aspect_ratio))
-                meme_panel = np.full((h, panel_w, 3), 15, dtype=np.uint8)
+                meme_panel = np.full((h, panel_w, 3), 25, dtype=np.uint8)
+                placeholder = "..."
+                (tw, th), _ = cv2.getTextSize(placeholder, cv2.FONT_HERSHEY_SIMPLEX, 1.5, 3)
+                cv2.putText(
+                    meme_panel, placeholder,
+                    ((panel_w - tw) // 2, (h + th) // 2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (90, 90, 90), 3
+                )
 
             display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
             display[:, :w] = frame
             display[:, w:w + panel_w] = meme_panel
 
-            self._draw_glass_card(display, x=20, y=20, width=110, height=38, alpha=0.5)
-            cv2.putText(display, "YOU", (35, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2, cv2.LINE_AA)
+            cv2.rectangle(display, (5, 5), (200, 45), (0, 0, 0), -1)
+            cv2.putText(display, "YOU", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
 
             if user_features is None:
-                self._draw_glass_card(display, x=20, y=h - 50, width=190, height=32, alpha=0.6)
-                cv2.putText(display, "NO FACE DETECTED", (32, h - 29), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (120, 120, 255), 1, cv2.LINE_AA)
+                cv2.putText(display, "No face detected", (10, h - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-            card_w = panel_w - 40
             if matched:
-                self._draw_glass_card(display, x=w + 20, y=20, width=card_w, height=75, alpha=0.65)
-                # Meme Name
-                cv2.putText(display, best_meme['name'].upper(), (w + 35, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
-                # Match Score Badge
-                cv2.putText(display, f"MATCH  {score:.1f}", (w + 35, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 230, 180), 1, cv2.LINE_AA)
+                cv2.rectangle(display, (w + 5, 5), (w + panel_w - 5, 75), (0, 0, 0), -1)
+                cv2.putText(display, best_meme['name'], (w + 10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+                cv2.putText(display, f"Match: {score:.1f}", (w + 10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
             else:
-                self._draw_glass_card(display, x=w + 20, y=20, width=card_w, height=48, alpha=0.5)
-                readout = f"WAITING... ({score:.0f}/{self.match_threshold:.0f})" if best_meme else "SEARCHING..."
-                cv2.putText(display, readout, (w + 35, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (160, 160, 160), 1, cv2.LINE_AA)
+                cv2.rectangle(display, (w + 5, 5), (w + panel_w - 5, 45), (0, 0, 0), -1)
+                readout = f"Waiting... ({score:.0f}/{self.match_threshold:.0f})" if best_meme else "Waiting for face..."
+                cv2.putText(display, readout, (w + 10, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (180, 180, 180), 2)
 
-            cv2.line(display, (w, 0), (w, h), (40, 40, 40), 1, cv2.LINE_AA)
-
-            cv2.imshow("Meme Matcher", display)
+            cv2.imshow("Meme Matcher - Press Q to quit ^^", display)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
