@@ -1,0 +1,31 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Virtual environments ---
+venv/
+.venv/
+env/
+ENV/
+
+face_landmarker.task
+hand_landmarker.task
+
+# Cached feature extraction (regenerated automatically, and machine/version specific)
+meme_features_cache.pkl
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+
+# --- Distribution / packaging ---
+build/
+dist/
+*.egg-info/

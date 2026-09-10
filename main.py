@@ -20,11 +20,12 @@ class MemeMatcher:
 
     CACHE_FILE = "meme_features_cache.pkl"
 
-    def __init__(self, assets_folder="assets", frame_skip=2, meme_height=480):
+    def __init__(self, assets_folder="assets", frame_skip=2, meme_height=480, match_threshold=170):
         self.last_features = None
         self.frame_counter = 0
         self.frame_skip = frame_skip
         self.meme_height = meme_height
+        self.match_threshold = match_threshold
 
         # Download both face and hand models
         self.face_model_path = self._download_model(
@@ -55,6 +56,12 @@ class MemeMatcher:
         self.feature_factors = np.array([10, 10, 10, 10, 15, 15, 5, 5, 5, 5, 5, 5, 5])
 
         self.load_memes(assets_folder)
+
+        if self.memes:
+            aspects = [m['image'].shape[1] / m['image'].shape[0] for m in self.memes]
+            self.meme_aspect_ratio = float(np.mean(aspects))
+        else:
+            self.meme_aspect_ratio = 1.0
 
     def _download_model(self, model_path, url):
         if not os.path.exists(model_path):
@@ -92,43 +99,96 @@ class MemeMatcher:
             )
         )
 
+    def _file_signature(self, img_file):
+        """A signature that changes if the file is edited/replaced or meme_height changes."""
+        stat = img_file.stat()
+        return (stat.st_mtime, stat.st_size, self.meme_height)
+
     def load_memes(self, folder):
-        cache_exists = os.path.exists(self.CACHE_FILE)
-        if cache_exists:
-            with open(self.CACHE_FILE, "rb") as f:
-                self.memes, self.meme_features = pickle.load(f)
-            print(f"Loaded {len(self.memes)} memes from cache.\n")
-            return
-
         assets_path = Path(folder)
-        image_files = list(assets_path.glob("*.jpg")) + list(assets_path.glob("*.png")) + list(assets_path.glob("*.jpeg"))
-        print(f"Found {len(image_files)} meme images. Extracting Features...")
+        image_files = sorted(
+            list(assets_path.glob("*.jpg"))
+            + list(assets_path.glob("*.jpeg"))
+            + list(assets_path.glob("*.png"))
+        )
+        print(f"Found {len(image_files)} meme image(s) in '{folder}'.")
 
-        def process_meme(img_file):
-            img = cv2.imread(str(img_file))
-            if img is None:
-                return None
-            h, w = img.shape[:2]
-            scale = self.meme_height / h
-            img_resized = cv2.resize(img, (int(w * scale), self.meme_height))
-            features = self.extract_face_features(img_resized, is_static=True)
-            if features is None:
-                print(f"No face detected in {img_file.name}")
-                return None
-            return {'image': img_resized, 'name': img_file.stem.replace('_', ' ').title(), 'path': str(img_file)}, features
+        cache = {}
+        if os.path.exists(self.CACHE_FILE):
+            try:
+                with open(self.CACHE_FILE, "rb") as f:
+                    loaded = pickle.load(f)
+                if isinstance(loaded, dict):
+                    cache = loaded
+                else:
+                    print("Cache is in an old format, rebuilding it.")
+            except (pickle.UnpicklingError, EOFError, AttributeError, ValueError):
+                print("Cache file could not be read, rebuilding it.")
 
-        with ThreadPoolExecutor() as executor:
-            results = list(executor.map(process_meme, sorted(image_files)))
+        to_process = []
+        reused = {}
+        for img_file in image_files:
+            key = str(img_file)
+            entry = cache.get(key)
+            if entry and entry.get("signature") == self._file_signature(img_file):
+                reused[key] = entry
+            else:
+                to_process.append(img_file)
 
-        for r in results:
-            if r:
-                meme, feature = r
-                self.memes.append(meme)
-                self.meme_features.append(feature)
-                print(f"Loaded: {meme['name']}")
+        removed = set(cache.keys()) - {str(f) for f in image_files}
+        if removed:
+            names = ", ".join(Path(p).name for p in removed)
+            print(f"Dropping {len(removed)} meme(s) no longer in '{folder}': {names}")
+
+        if to_process:
+            print(f"Extracting features for {len(to_process)} new/changed image(s)...")
+
+            def process_meme(img_file):
+                img = cv2.imread(str(img_file))
+                if img is None:
+                    print(f"Could not read image: {img_file.name}")
+                    return None
+                h, w = img.shape[:2]
+                scale = self.meme_height / h
+                img_resized = cv2.resize(img, (int(w * scale), self.meme_height))
+                features = self.extract_face_features(img_resized, is_static=True)
+                if features is None:
+                    print(f"No face detected in {img_file.name} - skipping.")
+                    return None
+                meme = {
+                    'image': img_resized,
+                    'name': img_file.stem.replace('_', ' ').title(),
+                    'path': str(img_file),
+                }
+                return str(img_file), {
+                    "signature": self._file_signature(img_file),
+                    "meme": meme,
+                    "features": features,
+                }
+
+            with ThreadPoolExecutor() as executor:
+                results = list(executor.map(process_meme, to_process))
+
+            for r in results:
+                if r:
+                    key, entry = r
+                    reused[key] = entry
+                    print(f"Loaded: {entry['meme']['name']}")
+        else:
+            print("No new or changed images - using cached features for all of them.")
+
+        # Rebuild self.memes / self.meme_features in a stable, sorted order.
+        self.memes = []
+        self.meme_features = []
+        for img_file in image_files:
+            entry = reused.get(str(img_file))
+            if entry:
+                self.memes.append(entry["meme"])
+                self.meme_features.append(entry["features"])
 
         with open(self.CACHE_FILE, "wb") as f:
-            pickle.dump((self.memes, self.meme_features), f)
+            pickle.dump(reused, f)
+
         print(f"Memes loaded: {len(self.memes)}\n")
 
     def extract_face_features(self, image, is_static=False):
@@ -149,7 +209,7 @@ class MemeMatcher:
             self.frame_counter += 1
             if self.frame_counter % self.frame_skip != 0:
                 return getattr(self, "last_features", None)
-            timestamp = int(self.frame_counter * 33) # approximate timestamp in ms
+            timestamp = int(self.frame_counter * 33)
             face_result = face_landmarker.detect_for_video(mp_image, timestamp)
             hand_result = hand_landmarker.detect_for_video(mp_image, timestamp)
 
@@ -245,6 +305,14 @@ class MemeMatcher:
         best_match_idx = np.argmax(scores)
         return self.memes[best_match_idx], scores[best_match_idx]
 
+    def _draw_glass_card(self, overlay, x, y, width, height, alpha=0.55, color=(20, 20, 20)):
+        """Renders a translucent glassmorphic panel with a light highlight border."""
+        sub = overlay[y:y+height, x:x+width]
+        rect = np.full_like(sub, color, dtype=np.uint8)
+        cv2.addWeighted(rect, alpha, sub, 1 - alpha, 0, sub)
+        
+        cv2.rectangle(overlay, (x, y), (x + width, y + height), (255, 255, 255), 1, cv2.LINE_AA)
+
     def run(self):
         cap = cv2.VideoCapture(0)
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -261,33 +329,48 @@ class MemeMatcher:
             if not ret:
                 break
             frame = cv2.flip(frame, 1)
+            h, w = frame.shape[:2]
 
             user_features = self.extract_face_features(frame)
             best_meme, score = self.find_best_match(user_features)
+            matched = best_meme is not None and score >= self.match_threshold
 
-            h, w = frame.shape[:2]
-
-            if best_meme:
+            if matched:
                 meme_img = best_meme['image']
                 meme_h, meme_w = meme_img.shape[:2]
                 scale = h / meme_h
-                new_w = int(meme_w * scale)
-                meme_resized = cv2.resize(meme_img, (new_w, h))
-
-                display = np.zeros((h, w + new_w, 3), dtype=np.uint8)
-                display[:, :w] = frame
-                display[:, w:w + new_w] = meme_resized
-
-                cv2.rectangle(display, (5, 5), (200, 45), (0, 0, 0), -1)
-                cv2.putText(display, "YOU", (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 2)
-                cv2.rectangle(display, (w + 5, 5), (w + new_w - 5, 75), (0, 0, 0), -1)
-                cv2.putText(display, best_meme['name'], (w + 10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-                cv2.putText(display, f"Match: {score:.1f}", (w + 10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+                panel_w = int(meme_w * scale)
+                meme_panel = cv2.resize(meme_img, (panel_w, h))
             else:
-                display = frame
-                cv2.putText(display, "No face detected", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                panel_w = max(1, int(h * self.meme_aspect_ratio))
+                meme_panel = np.full((h, panel_w, 3), 15, dtype=np.uint8)
 
-            cv2.imshow("Meme Matcher - Press Q to quit ^^", display)
+            display = np.zeros((h, w + panel_w, 3), dtype=np.uint8)
+            display[:, :w] = frame
+            display[:, w:w + panel_w] = meme_panel
+
+            self._draw_glass_card(display, x=20, y=20, width=110, height=38, alpha=0.5)
+            cv2.putText(display, "YOU", (35, 46), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (240, 240, 240), 2, cv2.LINE_AA)
+
+            if user_features is None:
+                self._draw_glass_card(display, x=20, y=h - 50, width=190, height=32, alpha=0.6)
+                cv2.putText(display, "NO FACE DETECTED", (32, h - 29), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (120, 120, 255), 1, cv2.LINE_AA)
+
+            card_w = panel_w - 40
+            if matched:
+                self._draw_glass_card(display, x=w + 20, y=20, width=card_w, height=75, alpha=0.65)
+                # Meme Name
+                cv2.putText(display, best_meme['name'].upper(), (w + 35, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
+                # Match Score Badge
+                cv2.putText(display, f"MATCH  {score:.1f}", (w + 35, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 230, 180), 1, cv2.LINE_AA)
+            else:
+                self._draw_glass_card(display, x=w + 20, y=20, width=card_w, height=48, alpha=0.5)
+                readout = f"WAITING... ({score:.0f}/{self.match_threshold:.0f})" if best_meme else "SEARCHING..."
+                cv2.putText(display, readout, (w + 35, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (160, 160, 160), 1, cv2.LINE_AA)
+
+            cv2.line(display, (w, 0), (w, h), (40, 40, 40), 1, cv2.LINE_AA)
+
+            cv2.imshow("Meme Matcher", display)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
