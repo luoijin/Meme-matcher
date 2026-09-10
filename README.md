@@ -24,9 +24,6 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
   - `mediapipe`
   - `Pillow` (used to render the on-screen status pill and loading animation)
 
-  > **Note:** `Pillow` isn't currently listed in `requirements.txt` even though `main.py` imports it. Until that's added, install it manually with `pip install Pillow` alongside the other packages.
-
-
 ## Installation
 
 ### Windows
