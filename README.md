@@ -7,8 +7,7 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
 ### Direct Downloads 
 
 [![Download Windows](https://img.shields.io/badge/Download-Windows_.exe-7C3AED?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.exe)
-[![Download Linux](https://img.shields.io/badge/Download-Linux_Binary-7C3AED?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/Meme-Matcher-Linux)
-[![Download macOS Binary](https://img.shields.io/badge/Download-macOS_Binary-7C3AED?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main)
+[![Download Linux](https://img.shields.io/badge/Download-Linux_Binary-7C3AED?style=for-the-badge&logo=linux&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main)
 [![Download macOS App](https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.10/main.app.zip)
  
 
