@@ -11,6 +11,10 @@ Meme Matcher uses [MediaPipe](https://developers.google.com/mediapipe) face and 
 [![Download macOS App](https://img.shields.io/badge/Download-macOS_.app-7C3AED?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/luoijin/Meme-matcher/releases/download/v1.0.11/main.app.zip)
  
 
+<br>
+
+[![Total Downloads](https://img.shields.io/github/downloads/luoijin/Meme-matcher/total?style=for-the-badge&logo=github&logoColor=7C3AED&label=TOTAL%20DOWNLOADS&labelColor=0f172a&color=7C3AED)](https://github.com/luoijin/Meme-matcher/releases)
+
 ## How it works
 
 1. On startup, Meme Matcher downloads the MediaPipe `face_landmarker.task` and `hand_landmarker.task` models (only once — they're cached locally).
